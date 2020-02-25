@@ -77,10 +77,13 @@ Several options are available, as fields of the `opt` structure:
 
 ## References
 
-This algorithm has been described in an ISMRM abstract:
+This algorithm has been described and used in a couple of ISMRM abstracts:
 
 - **Estimation of net receive sensitivity - at 3T and 7T - for correction of inter-scan motion artefacts in R1 mapping.**  
 [Yaël Balbastre](y.balbastre@ucl.ac.uk), [Nadège Corbin](n.corbin@ucl.ac.uk), [Martina F. Callaghan](m.callaghan@ucl.ac.uk)  
+ISMRM 2020
+- **Modelling RF coil-sensitivity induced artefacts in prospective motion-corrected accelerated 3D-EPI fMRI**  
+[Nadine Graedel](n.graedel@ucl.ac.uk), [Yaël Balbastre](y.balbastre@ucl.ac.uk), [Nadège Corbin](n.corbin@ucl.ac.uk), [Oliver Josephs](o.josephs@ucl.ac.uk), [Martina F. Callaghan](m.callaghan@ucl.ac.uk)  
 ISMRM 2020
 
 ## License
