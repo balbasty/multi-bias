@@ -62,35 +62,24 @@ The output are
   are writen on disk.
 
 Several options are available, as fields of the `opt` structure:
-+-------------------------------------------------------------------------+
-| Name | Range | Default | Description
-+-------------------------------------------------------------------------+
-| itermax | int > 0 | 16 | Maximum number of iterations
-| tol | float > 0 | 1E-3 | Gain threshold for early stopping
-| lambda | float > 0 | 1E3 | Regularisation factor per channel
-| sigma | float > 0 | NaN | Noise standard deviation per channel
-| vs | float > 0 | NaN/1 | Voxel size. 
-                           By default, it is inferred from the input headers.
-                           If it cannot be inferred, the default value is 1.
-| verbose | int >= 0 | 1 | Verbosity level: 0=quiet / 1=print / 2=plot
-| map | bool | false | Memory map input data (slower but saves RAM)
-| threads | int >= 0 / 'matlab' / 'automatic' | 
-    Number of threads used by both Matlab and SPM: 
-    'matlab' = Matlab's current settings
-    'automatic = Matlab's automatic setting
-| mask | bool | false | Mask of voxels to discard
-    false = use all all voxels
-    true  = estimate and mask out background
-    array  = mask out using provided background mask
-| folder | char | '' | Output folder. Do not write output files if empty.
-+-------------------------------------------------------------------------+
+| Name | Range | Default | Description |
+|------|-------|---------|-------------|
+| itermax | int > 0 | 16 | Maximum number of iterations |
+| tol | float > 0 | 1E-3 | Gain threshold for early stopping |
+| lambda | float > 0 | 1E3 | Regularisation factor per channel |
+| sigma | float > 0 | NaN | Noise standard deviation per channel |
+| vs | float > 0 | NaN/1 | Voxel size. By default, it is inferred from the input headers. If it cannot be inferred, the default value is 1. |
+| verbose | int >= 0 | 1 | Verbosity level: 0=quiet / 1=print / 2=plot |
+| map | bool | false | Memory map input data (slower but saves RAM) |
+| threads | int >= 0 / 'matlab' / 'automatic' | Number of threads used by both Matlab and SPM: 'matlab' = Matlab's current settings / 'automatic = Matlab's automatic setting |
+| mask | bool | false | Mask of voxels to discard: false = use all all voxels/ true  = estimate and mask out background / array  = mask out using provided background mask |
+| folder | char | '' | Output folder. Do not write output files if empty. |
 
 ## References
 
 This algorithm has been described in an ISMRM abstract:
 
-    . **Estimation of net receive sensitivity - at 3T and 7T - for correction 
-      of inter-scan motion artefacts in R1 mapping.**
+**Estimation of net receive sensitivity - at 3T and 7T - for correction of inter-scan motion artefacts in R1 mapping.**
 [Yaël Balbastre](y.balbastre@ucl.ac.uk), [Nadège Corbin](n.corbin@ucl.ac.uk), [Martina F. Callaghan](m.callaghan@ucl.ac.uk)
 ISMRM 2020
 
