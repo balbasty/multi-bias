@@ -44,7 +44,7 @@ If more flexibility is required, `multibias` can be used as a function:
 ```
 The input `x` can be either:
 - A 5D array: the fourth dimension should correspond to channels (and 
-  therefore to bias fields), while the fifth channel should correspond to
+  therefore to bias fields), while the fifth dimension should correspond to
   different contrasts. Note that in this model, bias fields are shared 
   across contrasts and differ across channels.
 - A 2d cell array of filenames. Here the first dimension corresponds to 
