@@ -34,7 +34,7 @@ and that you like graphical interfaces, the most simple usage is:
 You will first be asked to select all input files, then to choose an 
 output directory. The algorithm will then run and write the results on 
 disk. There will be as many bias field images as channels (prefixed by 'b')
-and one mean image (prefixed by 'm');
+and one mean image (prefixed by 'm').
 
 ### Command line
 
