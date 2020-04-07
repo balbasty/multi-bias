@@ -84,7 +84,7 @@ end
 % - Ensure right number of elements
 opt.lambda = pad(opt.lambda(:), [Nc - numel(opt.lambda) 0], 'replicate', 'post');
 opt.sigma  = pad(opt.sigma(:),  [Nc - numel(opt.sigma)  0], 'replicate', 'post');
-opt.vs     = pad(opt.vs(:)',    [3  - numel(opt.vs)     0], 'replicate', 'post');
+opt.vs     = pad(opt.vs(:)',    [0 3  - numel(opt.vs)],     'replicate', 'post');
 
 % - Load data in RAM
 if ~opt.map, x = loadsametype(x); end
