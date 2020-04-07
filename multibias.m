@@ -331,7 +331,8 @@ ndigitse = ceil(log10(Ne+1));
 
 % - Create filenames for bias fields
 bnames   = cell(1,Nc);  % Filenames
-bmats    = cell(1,Nc);  % Orientation matrices
+bmats    = cell(1,Nc);  % Orientation matrices (aligned)
+bmat0s   = cell(1,Nc);  % Orientation matrices (scanner)
 bdescrip = cell(1,Nc);  % Description
 if size(fnames,1) == Nc
     for c=1:Nc
@@ -339,6 +340,7 @@ if size(fnames,1) == Nc
         [~, fname, ~] = fileparts(fnames{c,1});
         bnames{c}     = ['b' fname '.nii'];
         bmats{c}      = nii.mat;
+        bmat0s{c}     = nii.mat0;
         bdescrip{c}   = nii.descrip;
     end
 elseif ~isempty(fnames)
@@ -347,12 +349,14 @@ elseif ~isempty(fnames)
     for c=1:Nc
         bnames{c}   = sprintf(['b' fname '-%0' num2str(ndigitsc) 'd.nii'], c);
         bmats{c}    = nii.mat;
+        bmat0s{c}   = nii.mat0;
         bdescrip{c} = nii.descrip;
     end
 else
     for c=1:Nc
         bnames{c}   = sprintf(['b-%0' num2str(ndigitsc) 'd.nii'], c);
         bmats{c}    = eye(4);
+        bmat0s{c}   = eye(4);
         bdescrip{c} = sprintf('Bias field [%d]', c);
     end
 end
@@ -392,6 +396,7 @@ for c=1:Nc
     nii           = nii0;
     nii.dat.fname = fullfile(opt.output, bnames{c});
     nii.mat       = bmats{c};
+    nii.mat0      = bmat0s{c};
     nii.descrip   = bdescrip{c};
     create(nii);
     nii.dat(:,:,:) = b(:,:,:,c);
