@@ -22,7 +22,7 @@ function [b,m] = multibias(x,opt)
 %       . map     - Memory map data (slower but saves RAM)  [false]
 %       . armijo  - Damping factors for Gauss-Newton        [8 4 2 1]
 %       . threads - Number of threads N|'matlab'            ['matlab']
-%       . folder  - Output folder.                          ['']
+%       . output  - Output folder.                          ['']
 %       . mask    - Mask of voxels to discard:
 %                   [false] = use all all voxels
 %                    true   = estimate and mask out background
