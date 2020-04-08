@@ -20,8 +20,10 @@ function Y = pad(X, padsize, method, direction)
 dim = size(X);
 padsize = reshape(padsize, 1, []);
 
+ismethod = ischar(method) && ~isempty(method) && ~isscalar(method);
+
 % Select appropriate indexing method
-if ~isscalar(method)
+if ismethod
     switch lower(method)
         case 'circular'
             fillidx = @circidx;
@@ -30,7 +32,7 @@ if ~isscalar(method)
         case 'symmetric'
             fillidx = @symidx;
         otherwise
-            error('Unknoen method %s', method);
+            error('Unknown method %s', method);
     end
 end
 
@@ -50,7 +52,7 @@ newdim  = dim + padsize * padfactor;
 
 S = struct('type', '()', 'subs', {repmat({':'}, [1 numel(newdim)])});
 
-if isscalar(method)
+if ~ismethod
     % Allocate output volume
     if iscell(X)
         Y = cell(newdim);
