@@ -1,4 +1,4 @@
-function [b,m] = multibias(x,opt)
+function [varargout] = multibias(x,opt)
 % Estimate multiple bias fields.
 %
 %   This algorithm assumes a generative model of the data where multiple
@@ -8,64 +8,66 @@ function [b,m] = multibias(x,opt)
 %   Bias fields are multiplicative and encoded by their log (ensuring
 %   positivity).
 %
-% FORMAT [b,m] = multibias(x,[opt])
-% x   - [Nx Ny Nz Nc Ne] Multi-view image of the same object
+% FORMAT [output] = multibias(x,[opt])
+% x   - [Nc Ne]          Multi-view image of the same object (cell)
 % b   - [Nx Ny Nz Nc]    Inferred multi-channel bias field
 % m   - [Nx Ny Nz  1 Ne] Inferred mean image (after bias removal)
 % opt - Structure of options with fields:
-%       . itermax - Maximum number of iterations            [16]
-%       . tol     - Gain threshold for early stopping       [1E-3]
-%       . lambda  - Regularisation factor per channel       [1E3]
-%       . sigma   - Noise standard deviation per channel    [inferred]
-%       . vs      - Voxel size                              [inferred/1]
-%       . verbose - Verbosity level 0=quiet|1=print|2=plot  [1]
-%       . map     - Memory map data (slower but saves RAM)  [false]
-%       . armijo  - Damping factors for Gauss-Newton        [8 4 2 1]
-%       . threads - Number of threads N|'matlab'            ['matlab']
-%       . output  - Output folder.                          ['']
-%       . mask    - Mask of voxels to discard:
-%                   [false] = use all all voxels
-%                    true   = estimate and mask out background
-%                    array  = mask out using provided background mask
-%
-% Note that:
-% . if x is a [Nc Ne] cell array of filenames, they will be concatenated to
-%   for a [Nx Ny Nz Nc Ne] numeric array.
-% . if x is empty, the user can select channel files through the GUI. This
-%   mode does not currently allow for multiple contrasts.
+%       . itermax  - Maximum number of iterations             [16]
+%       . tol      - Gain threshold for early stopping        [1E-3]
+%       . lambda   - Regularisation factor    [Nc]            [1E5]
+%       . sigma    - Noise standard deviation [Nc Ne]         [inferred]
+%       . vs       - Voxel size                               [inferred/1]
+%       . verbose  - Verbosity level: 0=quiet|1=print|2+=plot [1]
+%       . map      - Memory map data (slower but saves RAM)   [false]
+%       . armijo   - Damping factors for Gauss-Newton         [8 4 2 1]
+%       . threads  - Number of threads; N|'matlab'            ['matlab']
+%       . folder   - Output folder (empty=don't write)        ['']
+%       . basename - Output basename (empty=input name)       ['']
+%       . mask     - Mask of voxels to discard:               [false]
+%                     false  = use all all voxels
+%                     true   = estimate background mask
+%                     array  = provided background mask
+%       . output   - List of returned objects among:          [{'m','wb'}]
+%                     'm':  mean image in mean space
+%                     'wm': mean image warped to native spaces
+%                     'b':  bias in mean space
+%                     'wb': bias warped in native space
+%                     'z':  log-bias in native space
+%                     'r':  world mean-to-native rigid mappings
 
 % -------------------------------------------------------------------------
 % Input volumes
-vs     = [];
 fnames = {};
-if nargin < 1, x      = [];                          end
-if isempty(x), x      = spm_select(Inf, 'image');    end
-if ischar(x),  x      = num2cell(x, 2);              end
-if iscell(x),  fnames = x;                           end
-if iscell(x),  [x,vs] = files2dat(x, 'ro');          end
-if isempty(x), error('No input provided');           end
+dm     = [];
+M      = [];
+if nargin < 1, x        = [];                          end
+if isempty(x), x        = spm_select(Inf, 'image');    end
+if ischar(x),  x        = num2cell(x, 2);              end
+if iscell(x),  fnames   = x;                           end
+if iscell(x),  [x,dm,M] = files2dat(x, 'ro');          end
+if isempty(x), error('No input provided');             end
 
-Nx  = size(x,1);
-Ny  = size(x,2);
-Nz  = size(x,3);
-Nc  = size(x,4);
-Ne  = size(x,5);
-lat = [Nx Ny Nz];
+Nc = size(x,1);
+Ne = size(x,2);
 
 % -------------------------------------------------------------------------
 % Options
 if nargin < 2, opt = struct; end
-if ~isfield(opt, 'itermax'), opt.itermax = 16;              end
-if ~isfield(opt, 'tol'),     opt.tol     = 1E-3;            end
-if ~isfield(opt, 'lambda'),  opt.lambda  = 1E5;             end
-if ~isfield(opt, 'sigma'),   opt.sigma   = NaN;             end
-if ~isfield(opt, 'vs'),      opt.vs      = NaN;             end
-if ~isfield(opt, 'verbose'), opt.verbose = 1;               end
-if ~isfield(opt, 'mask'),    opt.mask    = 0;               end
-if ~isfield(opt, 'map'),     opt.map     = 0;               end
-if ~isfield(opt, 'threads'), opt.threads = 'matlab';        end
-if ~isfield(opt, 'armijo'),  opt.armijo  = [8 4 2 1];       end
-if ~isfield(opt, 'output'),  opt.output  = '';              end
+if ~isfield(opt, 'itermax'),  opt.itermax  = 16;              end
+if ~isfield(opt, 'tol'),      opt.tol      = 1E-3;            end
+if ~isfield(opt, 'lambda'),   opt.lambda   = 1E5;             end
+if ~isfield(opt, 'sigma'),    opt.sigma    = NaN;             end
+if ~isfield(opt, 'vs'),       opt.vs       = NaN;             end
+if ~isfield(opt, 'verbose'),  opt.verbose  = 1;               end
+if ~isfield(opt, 'mask'),     opt.mask     = 0;               end
+if ~isfield(opt, 'map'),      opt.map      = 0;               end
+if ~isfield(opt, 'coreg'),    opt.coreg    = true;            end
+if ~isfield(opt, 'threads'),  opt.threads  = 'matlab';        end
+if ~isfield(opt, 'armijo'),   opt.armijo   = [8 4 2 1];       end
+if ~isfield(opt, 'folder'),   opt.folder   = '';              end
+if ~isfield(opt, 'output'),   opt.output   = {'m' 'b'};       end
+if ~isfield(opt, 'basename'), opt.basename = '';              end
 
 % - Set number of threads
 [nspm,nmatlab] = threads(opt.threads, 'both');
@@ -75,50 +77,67 @@ if nargout == 0 && isempty(opt.output)
     opt.output = spm_select(Inf, 'dir', 'Select output directory...');
 end
 
-% - Set inferred voxel size
-if isscalar(opt.vs) && ~isfinite(opt.vs)
-    if isempty(vs), opt.vs = 1;
-    else,           opt.vs = vs; end
+% - Ensure right number of elements
+opt.lambda = pad(opt.lambda(:), [Nc-numel(opt.lambda) 0], 'replicate', 'post');
+opt.sigma  = pad(opt.sigma,     [Nc-size(opt.sigma,1) Ne-size(opt.sigma,2)], 'replicate', 'post');
+if ~iscell(opt.mask), opt.mask = {opt.mask}; end
+opt.mask   = pad(opt.mask,      [Nc-size(opt.mask,1) Ne-size(opt.mask,2)], 'replicate', 'post');
+
+% - Co-register
+opt.R = repmat(eye(4), [1 1 Nc Ne]);
+if opt.coreg, opt.R = coreg(x, M); end
+for c=1:Nc
+for e=1:Ne
+    M(:,:,c,e) = opt.R(:,:,c,e)\M(:,:,c,e);
+end
 end
 
-% - Ensure right number of elements
-opt.lambda = pad(opt.lambda(:), [Nc - numel(opt.lambda) 0], 'replicate', 'post');
-opt.sigma  = pad(opt.sigma(:),  [Nc - numel(opt.sigma)  0], 'replicate', 'post');
-opt.vs     = pad(opt.vs(:)',    [0 3  - numel(opt.vs)],     'replicate', 'post');
+% - Mean space
+[dm0,opt.M0,opt.vs] = mean_space(M, dm, opt.vs);
+
+% - Precompute mapping
+opt.M = M;
+for c=1:Nc
+for e=1:Ne
+    opt.M(:,:,c,e) = opt.M0\opt.M(:,:,c,e);
+end
+end
 
 % - Load data in RAM
-if ~opt.map, x = loadsametype(x); end
+if ~opt.map, x = loadarray(x); end
 
 % -------------------------------------------------------------------------
 % Estimate noise standard deviation
-if any(~isfinite(opt.sigma))
-    % 1) Estimate noise sd in each channel and contrast
-    % 2) Weighted geometric mean across contrasts
-    [sigma,mu] = estimate_noise(x, opt.verbose);
-    sigma      = exp(sum(log(sigma).*mu,2)./sum(mu,2));
-    opt.sigma(~isfinite(opt.sigma)) = sigma(~isfinite(opt.sigma));
+for c=1:Nc
+for e=1:Ne
+if ~isfinite(opt.sigma(c,e))
+    opt.sigma(c,e) = estimate_noise(x{c,e}, opt.verbose);
+end
+end
 end
 
 % -------------------------------------------------------------------------
 % Compute background mask
-if isscalar(opt.mask) && opt.mask
-    warning('Not implemented yet'); opt.mask = 0;
+for c=1:Nc
+for e=1:Ne
+if isscalar(opt.mask{c,e}) && opt.mask{c,e}
+    warning('Not implemented yet'); opt.mask{c,e} = 0;
     % opt.mask = estimate_background(x, opt.verbose);
 end
-% Make it a mask of kept voxels (instead of discarded voxels)
-opt.mask = ~opt.mask;
+end
+end
 
 % -------------------------------------------------------------------------
 % Initialisation
-b  = zeros([lat Nc], 'single');   % Bias field
-m  = update_mean(x, b, opt);      % Mean image
+b  = zeros([dm0 Nc], 'single');   % Bias field
+m  = update_mean(x, b, [], opt);  % Mean image
 ll = [];                          % Log-likelihood
 
 show_progress(x, b, m, ll, opt);
     
 % -------------------------------------------------------------------------
 % Main loop
-llscl   = (Nx*Ny*Nz*Nc*Ne) * mean(1./opt.sigma.^2);
+llscl   = (prod(dm0)*Nc*Ne) * mean(1./opt.sigma.^2);
 armijos = 1./opt.armijo;
 for it=1:opt.itermax
     
@@ -128,7 +147,7 @@ for it=1:opt.itermax
     
     [b,llx,llb] = update_bias(x, b, m, opt);
     b           = centre_bias(b, opt);
-    m           = update_mean(x, b, opt);
+    m           = update_mean(x, b, m, opt);
    
     ll(end+1) = sum(llx(:)) + sum(llb(:));
     show_progress(x, b, m, ll, opt);
@@ -139,12 +158,12 @@ for it=1:opt.itermax
 end
 
 % -------------------------------------------------------------------------
-% Exponentiate bias field
-b = exp(b);
+% Prepare output objects
+varargout = prepare_output(b, m, x, opt);
 
 % -------------------------------------------------------------------------
 % Write on disk
-if ~isempty(opt.output), write_results(b, m, fnames, opt); end
+if ~isempty(opt.folder), write_results(varargout, fnames, opt); end
 
 threads(nspm,nmatlab);
 
@@ -154,43 +173,69 @@ threads(nspm,nmatlab);
 %
 % =========================================================================
 
-function m  = update_mean(x, b, opt)
+function m  = update_mean(x, b, m, opt)
 % Closed-form update of the mean image
 
 if opt.verbose, fprintf('Update mean\n'); end
 
-Nx  = size(x,1);
-Ny  = size(x,2);
-Nz  = size(x,3);
-Nc  = size(x,4);
-Ne  = size(x,5);
+Nx  = size(b,1);
+Ny  = size(b,2);
+Nz  = size(b,3);
+Nc  = size(x,1);
+Ne  = size(x,2);
+dm0 = [Nx Ny Nz];
 
-m = zeros([Nx Ny Nz 1 Ne], 'single');
-z = zeros([Nx Ny Nz],      'single');
-for c=1:Nc
-    is2 = 1./(opt.sigma(c)^2);
-    b1  = exp(b(:,:,:,c));
-    z   = z + is2 * b1.^2;
-    for e=1:Ne
-        m(:,:,:,1,e) = m(:,:,:,1,e) + is2 * b1 .* single(x(:,:,:,c,e));
+msk   = opt.mask;
+M     = opt.M;
+sigma = opt.sigma;
+
+if isempty(m), m = zeros([dm0 Ne], 'single'); end
+
+for it=1:2
+for e=1:Ne
+    g = single(0);
+    H = single(0);
+    for c=1:Nc
+        if isempty(x{c,e}), continue; end
+        is2  = 1./(sigma(c,e)^2);
+        x1   = single(x{c,e}());
+        dm1  = [size(x1) 1];
+        dm1  = dm1(1:3);
+        M1   = M(:,:,c,e);
+        b1   = b(:,:,:,c);
+        b1   = exp(pull(b1, M1, dm1));
+        m1   = pull(m(:,:,:,e), M1, dm1);
+        msk1 = msk{c,e};
+        msk1 = msk1 | ~isfinite(x1) | x1 == 0;
+        x1(msk1) = 0;
+        b1(msk1) = 0;
+        
+        g = g + push(is2 * b1.*(b1.*m1 - x1), M1, dm0);
+        H = H + push(is2 * b1.^2, M1, dm0);
     end
+    m(:,:,:,e) = max(m(:,:,:,e) - max(H, eps('single')).\g, 0);
 end
-m = bsxfun(@rdivide, m, z);
+end
 
 % -------------------------------------------------------------------------
 
 function [b,llx,llb] = update_bias(x, b, m, opt)
 % Gauss-Newton update of the c-th bias field
 
-Nc  = size(x,4);
-Ne  = size(x,5);
+Nx  = size(b,1);
+Ny  = size(b,2);
+Nz  = size(b,3);
+Nc  = size(x,1);
+Ne  = size(x,2);
+dm0 = [Nx Ny Nz];
 
 lambda  = opt.lambda;
 sigma   = opt.sigma;
 armijo  = opt.armijo;
 vs      = opt.vs;
 verbose = opt.verbose;
-mask    = opt.mask;
+msk     = opt.mask;
+M       = opt.M;
 
 if verbose
     ndigitsc = ceil(log10(Nc+1));
@@ -214,22 +259,31 @@ for c=1:Nc
         fprintf(']');
     end
     
-    lam1 = lambda(c);        % Regularisation factor
-    is2  = 1./(sigma(c)^2);  % Inverse variance
-    b1   = exp(b(:,:,:,c));  % Exponentiated bias field
 
     % --- Gradient and Hessian of the data term
     g = single(0);
     H = single(0);
     for e=1:Ne
-        m1 = b1 .* m(:,:,:,1,e) .* mask;                % Modulated mean
-        r1 = m1 - single(x(:,:,:,c,e)) .* mask;         % Residuals
+        is2  = 1./(sigma(c,e)^2);
+        x1   = single(x{c,e}());
+        dm1  = [size(x1) 1];
+        dm1  = dm1(1:3);
+        M1   = M(:,:,c,e);
+        b1   = exp(pull(b(:,:,:,c), M1, dm1));
+        msk1 = msk{c,e};
+        msk1 = msk1 | ~isfinite(x1) | x1 == 0;
+        x1(msk1) = 0;
+        b1(msk1) = 0;
+        m1   = b1.*pull(m(:,:,:,e), M1, dm1);
+        
+        r1 = m1 - x1;                                   % Residuals
         llx(c,e) = 0.5 * is2 * sum(r1(:).^2, 'double'); % Log-likelihood
-        g  = g + is2 * m1 .* r1;                        % Gradient
-        H  = H + is2 * m1 .^ 2;                         % Hessian
+        g  = g + push(is2 * m1.*r1, M1, dm0);           % Gradient
+        H  = H + push(is2 * m1.^2,  M1, dm0);           % Hessian
     end
 
     % --- Gradient of the prior term
+    lam1   = lambda(c);                                    % Reg factor
     b1     = b(:,:,:,c);                                   % Log bias field
     mom    = spm_field('vel2mom', b1, [vs 0 0 lam1]);      % Momentum
     g      = g + mom;                                      % Gradient
@@ -275,11 +329,11 @@ clf(f);
 if opt.verbose > 2, nrow = 2;
 else,               nrow = 1; end
 
-Nx = size(x,1);
-Ny = size(x,2);
-Nz = size(x,3);
-Nc = size(x,4);
-Ne = size(x,5);
+Nx = size(b,1);
+Ny = size(b,2);
+Nz = size(b,3);
+Nc = size(b,4);
+Ne = size(m,5);
 z  = ceil(Nz/2);
 
 % --- Mean image
@@ -300,17 +354,87 @@ if opt.verbose == 2, drawnow; return; end
 
 % --- Data
 subplot(nrow,2,3);
-x1 = reshape(x(:,:,z,:,1), [Nx Ny 1 Nc]);
+x1 = zeros([Nx Ny 1 Nc], 'single');
+for c=1:Nc
+    [x11,c11]  = push(x{c,1}, opt.M(:,:,c,1), [Nx Ny Nz]);
+    x11(c11>0) = x11(c11>0)./c11(c11>0);
+    x1(:,:,:,c) = x11(:,:,z);
+    clear x11 c11
+end
 montage(x1, 'DisplayRange', [], 'ThumbnailSize', [Nx Ny]);
 title('Observed images');
 
 % --- Bias
 subplot(nrow,2,4);
-b1 = reshape(exp(b(:,:,z,:,1)), [Nx Ny 1 Nc]);
+b1 = exp(b(:,:,z,:,1));
 montage(b1, 'DisplayRange', [], 'ThumbnailSize', [Nx Ny]);
 title('Bias fields');
 
 drawnow
+
+% -------------------------------------------------------------------------
+
+function output = prepare_output(b, m, x, opt)
+
+Nc = size(x,1);
+Ne = size(x,2);
+
+output = cell(1,numel(opt.output));
+for i=1:numel(opt.output)
+    switch opt.output{i}
+        case 'm'    % Mean image in mean space
+            output{i} = m;
+        case 'wm'   % Mean image in native space
+            output{i} = cell(size(x));
+            for c=1:Nc
+            for e=1:Ne
+                if isempty(x{c,e}), continue; end
+                dm = [size(x{c,e}) 1];
+                dm = dm(1:3);
+                output{i}{c,e} = pull(m, opt.M(:,:,c,e), dm);
+            end
+            end
+        case 'b'    % Exponentiated bias field in mean space
+            output{i} = exp(b);
+        case 'wb'   % Exponentiated bias field in native space
+            output{i} = cell(size(x));
+            for c=1:Nc
+            for e=1:Ne
+                if isempty(x{c,e}), continue; end
+                dm = [size(x{c,e}) 1];
+                dm = dm(1:3);
+                output{i}{c,e} = exp(pull(b(:,:,:,c,e), opt.M(:,:,c,e), dm));
+            end
+            end
+        case 'z'    % Log bias field in mean space
+            output{i} = b;
+        case 'wz'   % Log bias field in native space
+            output{i} = cell(size(x));
+            for c=1:Nc
+            for e=1:Ne
+                if isempty(x{c,e}), continue; end
+                dm = [size(x{c,e}) 1];
+                dm = dm(1:3);
+                output{i}{c,e} = pull(b(:,:,:,c,e), opt.M(:,:,c,e), dm);
+            end
+            end
+        case 'bm'   % Modulated mean image in mean space
+            output{i} = bsxfun(@times, exp(b), m);
+        case 'wbm'  % Modulated mean image in native space
+            output{i} = cell(size(x));
+            for c=1:Nc
+            for e=1:Ne
+                if isempty(x{c,e}), continue; end
+                dm = [size(x{c,e}) 1];
+                dm = dm(1:3);
+                output{i}{c,e} = pull(m(:,:,:,1,e), opt.M(:,:,c,e), dm);
+                output{i}{c,e} = output{i}{c,e} .* exp(pull(b(:,:,:,c,e), opt.M(:,:,c,e), dm));
+            end
+            end
+        case 'r'    % World mean-to-native rigid mappings
+            output{i} = opt.R;
+    end
+end
 
 % =========================================================================
 %
@@ -318,136 +442,176 @@ drawnow
 %
 % =========================================================================
 
-function write_results(b, m, fnames, opt)
+function write_results(output, fnames, opt)
 
-Nx = size(b,1);
-Ny = size(b,2);
-Nz = size(b,3);
-Nc = size(b,4);
-Ne = size(m, 5);
+Nc = size(opt.M,3);
+Ne = size(opt.M,5);
+Dc = ceil(log10(Nc+1));
+De = ceil(log10(Ne+1));
 
-ndigitsc = ceil(log10(Nc+1));
-ndigitse = ceil(log10(Ne+1));
-
-% - Create filenames for bias fields
-bnames   = cell(1,Nc);  % Filenames
-bmats    = cell(1,Nc);  % Orientation matrices (aligned)
-bmat0s   = cell(1,Nc);  % Orientation matrices (scanner)
-bdescrip = cell(1,Nc);  % Description
-if size(fnames,1) == Nc
-    for c=1:Nc
-        nii           = nifti(fnames{c,1});
-        [~, fname, ~] = fileparts(fnames{c,1});
-        bnames{c}     = ['b' fname '.nii'];
-        bmats{c}      = nii.mat;
-        bmat0s{c}     = nii.mat0;
-        bdescrip{c}   = nii.descrip;
-    end
-elseif ~isempty(fnames)
-    nii           = nifti(fnames{1});
-    [~, fname, ~] = fileparts(fnames{1});
-    for c=1:Nc
-        bnames{c}   = sprintf(['b' fname '-%0' num2str(ndigitsc) 'd.nii'], c);
-        bmats{c}    = nii.mat;
-        bmat0s{c}   = nii.mat0;
-        bdescrip{c} = nii.descrip;
-    end
-else
-    for c=1:Nc
-        bnames{c}   = sprintf(['b-%0' num2str(ndigitsc) 'd.nii'], c);
-        bmats{c}    = eye(4);
-        bmat0s{c}   = eye(4);
-        bdescrip{c} = sprintf('Bias field [%d]', c);
-    end
-end
-
-% - Create filenames for mean images
-mnames   = cell(1,Ne);  % Filenames
-mmats    = cell(1,Ne);  % Orientation matrices
-mdescrip = cell(1,Ne);  % Description
-if size(fnames,2) == Ne
-    for e=1:Ne
-        nii           = nifti(fnames{1,e});
-        [~, fname, ~] = fileparts(fnames{1,e});
-        mnames{e}     = ['m' fname '.nii'];
-        mmats{e}      = nii.mat;
-        mdescrip{e}   = nii.descrip;
-    end
-elseif ~isempty(fnames)
-    nii           = nifti(fnames{1});
-    [~, fname, ~] = fileparts(fnames{1});
-    for e=1:Ne
-        mnames{e}   = sprintf(['m' fname '-%0' num2str(ndigitse) 'd.nii'], e);
-        bmats{e}    = nii.mat;
-        bdescrip{e} = nii.descrip;
-    end
-else
-    for e=1:Ne
-        mnames{e} = sprintf(['m-%0' num2str(ndigitse) 'd.nii'], e);
-        mmats{e}    = eye(4);
-        mdescrip{e} = sprintf('Mean image [%d]', e);
-    end
-end
-
-% - write files
-nii0     = nifti;
-nii0.dat = file_array(fullfile(opt.output, bnames{1}), [Nx Ny Nz], 'float32');
+% - Filenames / Orientation matrices
+fnames = pad(fnames, [Nc-size(fnames,1) Ne-size(fnames,2)], '', 'post');
+mat  = repmat(eye(4), [1 1 Nc Ne]);
+mat0 = repmat(eye(4), [1 1 Nc Ne]);
 for c=1:Nc
-    nii           = nii0;
-    nii.dat.fname = fullfile(opt.output, bnames{c});
-    nii.mat       = bmats{c};
-    nii.mat0      = bmat0s{c};
-    nii.descrip   = bdescrip{c};
-    create(nii);
-    nii.dat(:,:,:) = b(:,:,:,c);
-end
 for e=1:Ne
-    nii           = nii0;
-    nii.dat.fname = fullfile(opt.output, mnames{e});
-    nii.mat       = mmats{e};
-    nii.descrip   = mdescrip{e};
-    create(nii);
-    nii.dat(:,:,:) = m(:,:,:,1,e);
+    if isempty(fnames{c,e}), continue; end
+    nii = nifti(fnames{c,e});
+    mat(:,:,c,e)  = nii.mat;
+    mat0(:,:,c,e) = nii.mat0;
+end
 end
 
-function x = loadsametype(x)
-% Load file array while retaining on-disk datatypes
-% (by default, file arrays are loaded as 'double')
-
-if ~isa(x, 'file_array'), return; end
-
-xt  = unique([struct(x).dtype]);
-dt  = datatypes;
-xt  = dt(ismember([dt.code], xt));
-if any(~[xt.isint])
-    xt = xt(~[xt.isint]);
-    converter = xt([xt.size] == max([xt.size])).conv;
-elseif any(~[xt.unsigned])
-    converter = dt(~[dt.unsigned] & [dt.int] & [dt.size] == max([xt.size])).conv;
+% Basenames
+if ~isempty(opt.basename)
+    opt.basename  = ['_' opt.basename];
+    basename      = cell(Nc,Ne);
+    [basename{:}] = deal(opt.basename);
 else
-    converter = xt([xt.size] == max([xt.size])).conv;
+    basename      = fnames;
+    for c=1:Nc
+    for e=1:Ne
+        if isempty(basename{c,e}), continue; end
+        [~,basename{c,e}] = fileparts(basename{c,e});
+        basename{c,e} = ['_' basename{c,e}];
+    end
+    end
 end
-x = converter(x());
 
-function [xo,vs] = files2dat(x, permission)
+% - Descriptions
+description     = struct;
+description.m   = 'Mean image (mean space)';
+description.wm  = 'Mean image (native space)';
+description.b   = 'Bias field (mean space)';
+description.wb  = 'Bias field (native space)';
+description.z   = 'Log bias field (mean space)';
+description.wz  = 'Log bias field (native space)';
+description.z   = 'Log bias field (mean space)';
+description.wz  = 'Log bias field (native space)';
+description.bm  = 'Modulated image (mean space)';
+description.wbm = 'Modulated image (native space)';
+
+% - Write files
+for i=1:numel(output)
+    if opt.output{i}(1) == 'w'
+        % NATIVE SPACE
+        for c=1:size(output{i},1)
+        for e=1:size(output{i},2)
+            if isempty(output{i}{c,e}), continue; end
+            fname = basename{c,e};
+            if size(output{i},1) > 1
+                fname = sprintf([fname '-%0' num2str(Dc) 'd'], c);
+            end
+            if size(output{i},2) > 1
+                fname = sprintf([fname '-%0' num2str(De) 'd'], e);
+            end
+            fname = [opt.output{i} fname '.nii'];
+            nii         = nifti;
+            nii.dat     = file_array(fullfile(opt.folder, fname), size(output{i}{c,e}), 'float32');
+            nii.mat     = mat(:,:,c,e);
+            nii.mat0    = mat0(:,:,c,e);
+            nii.descrip = description.(opt.output{i});
+            create(nii);
+            nii.dat(:,:,:) = output{i}{c,e};
+        end
+        end
+    elseif opt.output{i}(1) == 'r'
+        % TRANSFORMATIONS
+        R = opt.R;
+        save(fullfile(opt.folder, ['r' basename{1,1} '.mat']), 'R');
+    else
+        % MEAN SPACE
+        for c=1:size(output{i},4)
+        for e=1:size(output{i},5)
+            fname = basename{c,e};
+            if size(output{i},1) > 1
+                fname = sprintf([fname '-%0' num2str(Dc) 'd'], c);
+            end
+            if size(output{i},2) > 1
+                fname = sprintf([fname '-%0' num2str(De) 'd'], e);
+            end
+            fname = [opt.output{i} fname '.nii'];
+            dm0   = [size(output{i},1) size(output{i},2) size(output{i},3)];
+            nii         = nifti;
+            nii.dat     = file_array(fullfile(opt.folder, fname), dm0, 'float32');
+            nii.mat     = opt.M0;
+            nii.descrip = description.(opt.output{i});
+            create(nii);
+            nii.dat(:,:,:) = output{i}(:,:,:,c,e);
+        end
+        end
+    end
+end
+% -------------------------------------------------------------------------
+function [x,dm,M] = files2dat(x, permission)
 % Create a virtual (memory-mapped) 5D array from a 2D cell array of
 % filenames.
 if nargin < 2, permission = 'rw'; end
 Nc = size(x,1);
 Ne = size(x,2);
-vs = [];
+dm = NaN(3,Nc,Ne);
+M  = NaN(4,4,Nc,Ne);
 % Convert filenames to file arrays
 for c=1:Nc
 for e=1:Ne
-    x{c,e} = nifti(deblank(x{c,e}));
-    if isempty(vs), vs = sqrt(sum(x{c,e}.mat(1:3,1:3).^2)); end
-    x{c,e} = x{c,e}.dat;
-    x{c,e}.permission = permission;
+    if isempty(x{c,e}), continue; end
+    if ~ischar(x{c,e}) && ~isa(x, 'nifti')
+        dm1             = [size(x{c,e}) 1];
+        dm1             = dm1(1:3);
+        dm(:,c,e)       = dm1(:);
+        M(:,:,c,e)      = eye(4);
+        continue;
+    end
+    x{c,e}              = nifti(x{c,e});
+    dm1                 = [size(x{c,e}.dat) 1];
+    dm1                 = dm1(1:3);
+    dm(:,c,e)           = dm1(:);
+    M(:,:,c,e)          = x{c,e}.mat;
+    x{c,e}              = x{c,e}.dat;
+    x{c,e}.permission   = permission;
 end
 end
-% Concatenate file arrays
-xo = cell(1,Nc);
-for c=1:Nc
-    xo{c} = cat(5, x{c,:});
+% -------------------------------------------------------------------------
+function x = pull(x, y, dmo)
+if ismatrix(y)
+    dmi = [size(x) 1];
+    dmi = dmi(1:3);
+    if sum(sum((y-eye(4)).^2)) < 1E-5 && ...
+       (nargin < 3 || dmo == dmi)
+        return;
+    end
+    y  = warps_affine(dmo, y);
 end
-xo = cat(4, xo{:});
+spm_diffeo('boundary', 1);
+x = spm_diffeo('pull', x, y);
+% -------------------------------------------------------------------------
+function [x,c] = push(x, y, dmo)
+if ismatrix(y)
+    dmi = [size(x) 1];
+    dmi = dmi(1:3);
+    if sum(sum((y-eye(4)).^2)) < 1E-5 && ...
+       (nargin < 3 || dmo == dmi)
+        return;
+    end
+    y  = warps_affine(dmi, y);
+end
+if nargin < 3
+    dmo = [size(x) 1];
+    dmo = dmo(1:3);
+end 
+spm_diffeo('boundary', 1);
+if nargout > 1
+    [x,c] = spm_diffeo('push', single(x()), y, dmo);
+else
+    x     = spm_diffeo('push', single(x()), y, dmo);
+end
+% -------------------------------------------------------------------------
+function psi = warps_affine(lat, mat)
+id  = warps_identity(lat);
+psi = reshape(reshape(id,[prod(lat) 3])*mat(1:3,1:3)' + mat(1:3,4)',[lat 3]);
+if lat(3) == 1, psi(:,:,:,3) = 1; end
+% -------------------------------------------------------------------------
+function id = warps_identity(d)
+id = zeros([d(:)' 3],'single');
+[id(:,:,:,1),id(:,:,:,2),id(:,:,:,3)] = ndgrid(single(1:d(1)),single(1:d(2)),single(1:d(3)));
+% -------------------------------------------------------------------------
