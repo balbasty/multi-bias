@@ -26,30 +26,25 @@ function [varargout] = multibias(x,opt)
 %       . basename - Output basename (empty=input name)       ['']
 %       . mask     - Mask of voxels to discard:               [false]
 %                     false  = use all all voxels
-%                     true   = estimate background mask
+%                     true   = estimate background mask (!not implemented!)
 %                     array  = provided background mask
 %       . output   - List of returned objects among:          [{'m','wb'}]
 %                     'm':  mean image in mean space
 %                     'wm': mean image warped to native spaces
 %                     'b':  bias in mean space
 %                     'wb': bias warped in native space
-%                     'z':  log-bias in native space
+%                     'z':  log-bias in mean space
+%                     'wz': log-bias in native space
 %                     'r':  world mean-to-native rigid mappings
-
-% -------------------------------------------------------------------------
-% Input volumes
-fnames = {};
-dm     = [];
-M      = [];
-if nargin < 1, x        = [];                          end
-if isempty(x), x        = spm_select(Inf, 'image');    end
-if ischar(x),  x        = num2cell(x, 2);              end
-if iscell(x),  fnames   = x;                           end
-if iscell(x),  [x,dm,M] = files2dat(x, 'ro');          end
-if isempty(x), error('No input provided');             end
-
-Nc = size(x,1);
-Ne = size(x,2);
+%
+% Notes:
+% ------
+% The input `x` can be either:
+% - a Nc*Ne cell array of (3D) filenames / file arrays / numeric arrays
+% - a Nx*Ny*Nx*Nc*Ne numeric array
+% If the input are known to be aligned and defined on the same grid:
+% - Disable co-registration (opt.coreg = false)
+% - If the inputs are not nifti files, specify the voxel size (opt.vs)
 
 % -------------------------------------------------------------------------
 % Options
@@ -68,6 +63,40 @@ if ~isfield(opt, 'armijo'),   opt.armijo   = [8 4 2 1];       end
 if ~isfield(opt, 'folder'),   opt.folder   = '';              end
 if ~isfield(opt, 'output'),   opt.output   = {'m' 'b'};       end
 if ~isfield(opt, 'basename'), opt.basename = '';              end
+
+% -------------------------------------------------------------------------
+% Input volumes
+fnames = {};
+if nargin < 1,             x        = [];                          end
+if isempty(x),             x        = spm_select(Inf, 'image');    end
+if ischar(x)||isstring(x), x        = cellstr(x);                  end
+if iscellstr(x),           fnames   = x;                           end
+if isnumeric(x),           x        = num2cell(x, 1:3);
+                           x        = shiftdim(x, 3);              end
+if isempty(x),             error('No input provided');             end
+if ~iscell(x),             error('Type %s not supported', class(x));  end
+
+Nc = size(x,1);
+Ne = size(x,2);
+
+% - Convert file names to file arrays + read headers
+[x,dm,M] = files2dat(x, 'ro');
+
+% - Use specified voxel size
+vs0 = pad(opt.vs(:)', [0 3-numel(opt.vs)], 'replicate', 'post');
+for c=1:Nc
+for e=1:Ne
+    vs  = sqrt(sum(M(1:3,1:3,c,e).^2));
+    scl = vs0;
+    scl(~isfinite(vs0)) = vs(~isfinite(vs0));
+    scl = scl ./ vs;
+    scl = [scl 1];
+    M(:,:,c,e) = M(:,:,c,e) * diag(scl);
+end
+end
+
+% -------------------------------------------------------------------------
+% Preprocessing
 
 % - Set number of threads
 [nspm,nmatlab] = threads(opt.threads, 'both');
@@ -93,7 +122,7 @@ end
 end
 
 % - Mean space
-[dm0,opt.M0,opt.vs] = mean_space(M, dm, opt.vs);
+[dm0,opt.M0,opt.vs] = mean_space(M, dm);
 
 % - Precompute mapping
 opt.M = M;
@@ -524,10 +553,10 @@ for i=1:numel(output)
         for c=1:size(output{i},4)
         for e=1:size(output{i},5)
             fname = basename{c,e};
-            if size(output{i},1) > 1
+            if size(output{i},4) > 1
                 fname = sprintf([fname '-%0' num2str(Dc) 'd'], c);
             end
-            if size(output{i},2) > 1
+            if size(output{i},5) > 1
                 fname = sprintf([fname '-%0' num2str(De) 'd'], e);
             end
             fname = [opt.output{i} fname '.nii'];
@@ -577,7 +606,7 @@ if ismatrix(y)
     dmi = [size(x) 1];
     dmi = dmi(1:3);
     if sum(sum((y-eye(4)).^2)) < 1E-5 && ...
-       (nargin < 3 || dmo == dmi)
+       (nargin < 3 || all(dmo == dmi))
         return;
     end
     y  = warps_affine(dmo, y);
@@ -590,7 +619,8 @@ if ismatrix(y)
     dmi = [size(x) 1];
     dmi = dmi(1:3);
     if sum(sum((y-eye(4)).^2)) < 1E-5 && ...
-       (nargin < 3 || dmo == dmi)
+       (nargin < 3 || all(dmo == dmi))
+        c = ones(dmi, 'single');
         return;
     end
     y  = warps_affine(dmi, y);
