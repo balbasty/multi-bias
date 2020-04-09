@@ -36,6 +36,7 @@ function [varargout] = multibias(x,opt)
 %                     'z':  log-bias in mean space
 %                     'wz': log-bias in native space
 %                     'r':  world mean-to-native rigid mappings
+%                     'r0': orientation matrix of the mean space
 %
 % Notes:
 % ------
@@ -410,7 +411,7 @@ Ne = size(x,2);
 
 output = cell(1,numel(opt.output));
 for i=1:numel(opt.output)
-    switch opt.output{i}
+    switch lower(opt.output{i})
         case 'm'    % Mean image in mean space
             output{i} = m;
         case 'wm'   % Mean image in native space
@@ -462,14 +463,12 @@ for i=1:numel(opt.output)
             end
         case 'r'    % World mean-to-native rigid mappings
             output{i} = opt.R;
+        case 'r0'    % Mean orientation matrix
+            output{i} = opt.M0;
     end
 end
 
-% =========================================================================
-%
-%                                HELPERS
-%
-% =========================================================================
+% -------------------------------------------------------------------------
 
 function write_results(output, fnames, opt)
 
@@ -544,10 +543,14 @@ for i=1:numel(output)
             nii.dat(:,:,:) = output{i}{c,e};
         end
         end
-    elseif opt.output{i}(1) == 'r'
+    elseif strcmpi(opt.output{i}, 'r')
         % TRANSFORMATIONS
-        R = opt.R;
+        R = output{i};
         save(fullfile(opt.folder, ['r' basename{1,1} '.mat']), 'R');
+    elseif strcmpi(opt.output{i}, 'r0')
+        % ORIENTATION
+        R0 = output{i};
+        save(fullfile(opt.folder, ['r0' basename{1,1} '.mat']), 'R0');
     else
         % MEAN SPACE
         for c=1:size(output{i},4)
@@ -571,7 +574,9 @@ for i=1:numel(output)
         end
     end
 end
+
 % -------------------------------------------------------------------------
+
 function [x,dm,M] = files2dat(x, permission)
 % Create a virtual (memory-mapped) 5D array from a 2D cell array of
 % filenames.
@@ -591,57 +596,27 @@ for e=1:Ne
         M(:,:,c,e)      = eye(4);
         continue;
     end
+    slice = [];
+    if ischar(x{c,e})
+        slice = strsplit(x{c,e}, ',');
+        x{c,e} = slice{1};
+        slice = cellfun(@str2double, slice(2:end));
+        if numel(slice) > 1
+            error('Comma notation only works for one dimension.')
+        end
+    end
     x{c,e}              = nifti(x{c,e});
     dm1                 = [size(x{c,e}.dat) 1];
     dm1                 = dm1(1:3);
     dm(:,c,e)           = dm1(:);
     M(:,:,c,e)          = x{c,e}.mat;
     x{c,e}              = x{c,e}.dat;
+    x{c,e}.dim(4)       = 1;
+    dt                  = datatypes;
+    dt                  = dt([dt.code] == struct(x{c,e}).dtype);
+    x{c,e}.offset       = x{c,e}.offset ...
+                        + prod(dm1)*dt.size*(slice-1);
     x{c,e}.permission   = permission;
 end
 end
-% -------------------------------------------------------------------------
-function x = pull(x, y, dmo)
-if ismatrix(y)
-    dmi = [size(x) 1];
-    dmi = dmi(1:3);
-    if sum(sum((y-eye(4)).^2)) < 1E-5 && ...
-       (nargin < 3 || all(dmo == dmi))
-        return;
-    end
-    y  = warps_affine(dmo, y);
-end
-spm_diffeo('boundary', 1);
-x = spm_diffeo('pull', x, y);
-% -------------------------------------------------------------------------
-function [x,c] = push(x, y, dmo)
-if ismatrix(y)
-    dmi = [size(x) 1];
-    dmi = dmi(1:3);
-    if sum(sum((y-eye(4)).^2)) < 1E-5 && ...
-       (nargin < 3 || all(dmo == dmi))
-        c = ones(dmi, 'single');
-        return;
-    end
-    y  = warps_affine(dmi, y);
-end
-if nargin < 3
-    dmo = [size(x) 1];
-    dmo = dmo(1:3);
-end 
-spm_diffeo('boundary', 1);
-if nargout > 1
-    [x,c] = spm_diffeo('push', single(x()), y, dmo);
-else
-    x     = spm_diffeo('push', single(x()), y, dmo);
-end
-% -------------------------------------------------------------------------
-function psi = warps_affine(lat, mat)
-id  = warps_identity(lat);
-psi = reshape(reshape(id,[prod(lat) 3])*mat(1:3,1:3)' + mat(1:3,4)',[lat 3]);
-if lat(3) == 1, psi(:,:,:,3) = 1; end
-% -------------------------------------------------------------------------
-function id = warps_identity(d)
-id = zeros([d(:)' 3],'single');
-[id(:,:,:,1),id(:,:,:,2),id(:,:,:,3)] = ndgrid(single(1:d(1)),single(1:d(2)),single(1:d(3)));
 % -------------------------------------------------------------------------
