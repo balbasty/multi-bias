@@ -14,8 +14,7 @@ q   = NaN(6,Nc*Ne);
 for i=1:numel(x)
     if isempty(x{i}), continue; end
     dat  = loadarray(x{i}, 'uint8', true, 0.9999);
-    x{i} = struct('uint8', dat, 'mat', M(:,:,i), ...
-                  'fname', x{i}.fname, 'dim', size(x{i}));
+    x{i} = struct('uint8', dat, 'mat', M(:,:,i));
     if isempty(ref)
         ref    = x{i};
         q(:,i) = 0;
