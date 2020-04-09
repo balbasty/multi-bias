@@ -40,7 +40,7 @@ and one mean image (prefixed by 'm').
 
 If more flexibility is required, `multibias` can be used as a function:
 ```{matlab}
->> [b,m] = multibias(x, opt);
+>> [wb,m] = multibias(x, opt);
 ```
 The input `x` can be either:
 - A 5D numeric array: the fourth dimension should correspond to channels
@@ -53,8 +53,8 @@ The input `x` can be either:
 - Empty. In this case, files can be selected through the GUI.
 
 The default output are
-- `b` is a 4D array of estimated bias field. The fourth dimension  
-  corresponds to channels.
+- `wb` is a cell of 3D arrays of estimated bias field, warped in native 
+  (observed) space.
 - `m` is a 5D array of combined 'mean' images. The fifth dimension 
   corresponds to contrasts, while the fourth dimension is of size 1.
 - If no output argument is asked (`>> multibias(x, opt);`), an output 
@@ -88,9 +88,9 @@ where:
 - `A{c,e}` is a projection matrix that maps from a _mean_ space -- on which
   the latent volumes are defined -- to the observed space {c,e}
 - `s{c,e}` is the noise standard eviation in the observe dimage {c,e}
-- p(Z{c}) = N(Z{c} | 0, inv(l{c}*L))
-- L is a precision matrix that captures the bending energy of the bias fields
-- l{c} is a channel-specific regularisation factor
+- `p(Z{c}) = N(Z{c} | 0, inv(l{c}*L))`
+- `L` is a precision matrix that captures the bending energy of the bias fields
+- `l{c}` is a channel-specific regularisation factor
 
 The mean space is obtained by computing the barycentre of the individual 
 orientation matrices (after-coregistration).
