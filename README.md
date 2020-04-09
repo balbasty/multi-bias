@@ -100,8 +100,8 @@ mutual information between each observed image and the first one.
 To avoid biasing the orientation matrices towards the lattice of the first 
 volume, all world-to-world alignement matrices are centred with respect 
 to the mean of their Lie algebra representation:
-> `R0   = exp(mean(Lie(R{:})))`
-> `R{:} = R{:}/R0
+- `R0   = exp(mean(Lie(R{:})))`
+- `R{:} = R{:}/R0`
 
 The unmodulated images and log-bias fields are updated in turn using 
 Gauss-Newton optimisation.
