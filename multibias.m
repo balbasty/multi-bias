@@ -47,6 +47,12 @@ function [varargout] = multibias(x,opt)
 % - Disable co-registration (opt.coreg = false)
 % - If the inputs are not nifti files, specify the voxel size (opt.vs)
 
+dirscript  = fileparts(which('multibias'));
+oldpath    = path;
+cleanupObj = onCleanup(@() path(oldpath));
+path(fullfile(dirscript, 'sub'), path);
+path(fullfile(spm('dir'), 'toolbox', 'Longitudinal'), path);
+
 % -------------------------------------------------------------------------
 % Options
 if nargin < 2, opt = struct; end
