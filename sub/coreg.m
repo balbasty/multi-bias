@@ -21,7 +21,9 @@ for i=1:numel(x)
         continue;
     end
     mov    = x{i};
-    q1     = spm_coreg(ref, mov, varargin{:});
+    if isempty(varargin), varargin{1} = struct('graphics', false);
+    else,                 varargin{1}.graphics = false; end
+    q1     = spm_coreg(ref, mov, varargin{1});
     q(:,i) = q1(:);
     x{i}   = NaN;
 end
