@@ -144,10 +144,11 @@ if ~opt.map, x = loadarray(x); end
 
 % -------------------------------------------------------------------------
 % Estimate noise standard deviation
+b = zeros(Nc,Ne);
 for c=1:Nc
 for e=1:Ne
 if ~isfinite(opt.sigma(c,e))
-    opt.sigma(c,e) = estimate_noise(x{c,e}, opt.verbose);
+    [opt.sigma(c,e),b(c,e)] = estimate_noise(x{c,e}, opt.verbose);
 end
 end
 end
@@ -165,7 +166,11 @@ end
 
 % -------------------------------------------------------------------------
 % Initialisation
-b  = zeros([dm0 Nc], 'single');   % Bias field
+b  = -log(mean(b,2));
+b  = b - sum(opt.lambda(:).*b)/sum(opt.lambda);
+b  = single(b);
+b  = reshape(b, [1 1 1 Nc Ne]);
+b  = repmat(b, dm0);
 m  = update_mean(x, b, [], opt);  % Mean image
 ll = [];                          % Log-likelihood
 
