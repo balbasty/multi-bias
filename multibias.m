@@ -607,13 +607,15 @@ for e=1:Ne
         M(:,:,c,e)      = eye(4);
         continue;
     end
-    slice = [];
+    slice = 1;
     if ischar(x{c,e})
         slice = strsplit(x{c,e}, ',');
         x{c,e} = slice{1};
         slice = cellfun(@str2double, slice(2:end));
         if numel(slice) > 1
             error('Comma notation only works for one dimension.')
+        elseif isempty(slice)
+            slice = 1;
         end
     end
     x{c,e}              = nifti(x{c,e});
