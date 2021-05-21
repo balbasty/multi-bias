@@ -20,7 +20,7 @@ function [varargout] = multibias(x,opt)
 %       . vs       - Voxel size                               [inferred/1]
 %       . verbose  - Verbosity level: 0=quiet|1=print|2+=plot [1]
 %       . map      - Memory map data (slower but saves RAM)   [false]
-%       . armijo   - Damping factors for Gauss-Newton         [8 4 2 1]
+%       . armijo   - Damping factors for Gauss-Newton         [1]
 %       . threads  - Number of threads; N|'matlab'            ['matlab']
 %       . folder   - Output folder (empty=don't write)        ['']
 %       . basename - Output basename (empty=input name)       ['']
@@ -66,7 +66,7 @@ if ~isfield(opt, 'mask'),     opt.mask     = 0;               end
 if ~isfield(opt, 'map'),      opt.map      = 0;               end
 if ~isfield(opt, 'coreg'),    opt.coreg    = true;            end
 if ~isfield(opt, 'threads'),  opt.threads  = 'matlab';        end
-if ~isfield(opt, 'armijo'),   opt.armijo   = [8 4 2 1];       end
+if ~isfield(opt, 'armijo'),   opt.armijo   = 1;               end
 if ~isfield(opt, 'folder'),   opt.folder   = '';              end
 if ~isfield(opt, 'output'),   opt.output   = {'m' 'b'};       end
 if ~isfield(opt, 'basename'), opt.basename = '';              end
@@ -317,10 +317,10 @@ for c=1:Nc
         b1(msk1) = 0;
         m1   = b1.*pull(m(:,:,:,e), M1, dm1);
         
-        r1 = m1 - x1;                                   % Residuals
-        llx(c,e) = 0.5 * is2 * sum(r1(:).^2, 'double'); % Log-likelihood
-        g  = g + push(is2 * m1.*r1, M1, dm0);           % Gradient
-        H  = H + push(is2 * m1.^2,  M1, dm0);           % Hessian
+        r1 = m1 - x1;                                      % Residuals
+        llx(c,e) = 0.5 * is2 * sum(r1(:).^2, 'double');    % Log-likelihood
+        g  = g + push(is2 * m1.*r1, M1, dm0);              % Gradient
+        H  = H + push(is2 * m1.*(m1 + abs(r1)), M1, dm0);  % Hessian
     end
 
     % --- Gradient of the prior term
