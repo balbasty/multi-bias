@@ -110,6 +110,7 @@ end
 
 % - If no output argument, write result on disk
 if nargout == 0 && isempty(opt.output)
+    spm_select('init');  % adds matlabbatch to the path if needed
     opt.output = spm_select(Inf, 'dir', 'Select output directory...');
 end
 
@@ -612,6 +613,7 @@ for e=1:Ne
         slice = strsplit(x{c,e}, ',');
         x{c,e} = slice{1};
         slice = cellfun(@str2double, slice(2:end));
+        if isempty(slice), slice = 1; end
         if numel(slice) > 1
             error('Comma notation only works for one dimension.')
         end
