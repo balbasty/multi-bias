@@ -66,7 +66,7 @@ Several options are available, as fields of the `opt` structure:
 |------|-------|---------|-------------|
 | itermax | int > 0   | 16         | Maximum number of iterations |
 | tol     | float > 0 | 1E-3       | Gain threshold for early stopping |
-| armijo  | float > 0 | [8 4 2 1]  | Damping factors for Gauss-Newton |
+| armijo  | float > 0 | 1          | Damping factors for Gauss-Newton |
 | lambda  | float > 0 | 1E5        | Regularisation factor per channel |
 | sigma   | float > 0 | NaN        | Noise standard deviation per channel |
 | vs      | float > 0 | NaN/1      | Voxel size. <br>By default, it is inferred from the input headers. <br>If it cannot be inferred, the default value is 1. |
